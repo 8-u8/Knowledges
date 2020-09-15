@@ -1,3 +1,5 @@
 IDDSM.md
 *.code-workspace
 Pipfile
+*.zip
+*.csv
