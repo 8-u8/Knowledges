@@ -12,7 +12,7 @@ ec_log <- BTYD::dc.ReadLines(cdnow_log,
                              )
 class(ec_log) # data.frame
 ec_log %>% head # chk
-
+ec_log$date <- as.Date(ec_log$date, "%Y%m%d")
 ec_log_MTOSD <- BTYD::dc.MergeTransactionsOnSameDate(ec_log)
 class(ec_log_MTOSD)
 end_of_cal_period <- as.Date("1997-09-30")
@@ -29,19 +29,25 @@ ec_log_MTOSD_cal <- ec_log_MTOSD[which(ec_log_MTOSD$date <= end_of_cal_period),]
 splited_data <- BTYD::dc.SplitUpElogForRepeatTrans(ec_log_MTOSD_cal)
 cleaned_elog <- splited_data$repeat.trans.elog
 
+head(splited_data$repeat.trans.elog)
+head(splited_data$cust.data)
+
 # pivot_wider?
 freq_cbt <- BTYD::dc.CreateFreqCBT(cleaned_elog)
 class(freq_cbt)
 
 tot_cbt <- BTYD::dc.CreateFreqCBT(ec_log_MTOSD)
 cal_cbt <- BTYD::dc.MergeCustomers(tot_cbt, freq_cbt)
-
-tot_cbt[1:3,1:5]
-cal_cbt[1:3,1:5]
-
-dim(freq_cbt)
-dim(tot_cbt)
-dim(cal_cbt)
+# 
+# class(tot_cbt)
+# class(cal_cbt)
+# 
+# tot_cbt[1:3,1:5]
+# cal_cbt[1:3,1:5]
+# 
+# dim(freq_cbt)
+# dim(tot_cbt)
+# dim(cal_cbt)
 
 birth_periods <- splited_data$cust.data$birth.per
 last_dates <- splited_data$cust.data$last.date
@@ -55,7 +61,7 @@ cal_cbs_dates <- data.frame(
 ## x: time definition: dialy/weekly/monthly/quartery/yeary.
 ## t.x: difference time per x.
 ## T.cal: difference between end_of_date and personal last purchase day per x.
-cal_cbs <- BTYD::dc.BuildCBSFromCBTAndDates(cal_cbt,       # cbt table.
+cal_cbs <- BTYD::dc.BuildCBSFromCBTAndDates(as.data.frame(cal_cbt),       # cbt table.
                                             cal_cbs_dates, # dates parameter(end_of_cal_period).
                                             per = "week")
 # parameter Estimation
@@ -79,22 +85,67 @@ colnames(p_matrix) <- c("r", "alpha", "s", "beta", "LL");
 
 # then, we can predict personal purchase count and withdrawal ratio
 # by above parameters.
-
-
 rownames(p_matrix) <- 1:3
 p_matrix
 
 
+# fitting and expectation
+## plot transaction parameters gamma(distribution lambda on Poisson)
+pnbd.PlotTransactionRateHeterogeneity(params)
+## plot droopout parameters gamma(distribution inversed mu on Exponential)
+pnbd.PlotDropoutRateHeterogeneity(params)
+
+pnbd.Expectation(params, t = 52)
+exp_indivisual <- cal_cbs["1516",]
+pnbd.ConditionalExpectedTransactions(params, T.star = 52,
+                                     x = exp_indivisual[1],
+                                     t.x = exp_indivisual[2],
+                                     T.cal = exp_indivisual[3])
+pnbd.PAlive(params,                  
+            x = exp_indivisual[1],
+            t.x = exp_indivisual[2],
+            T.cal = exp_indivisual[3])
+
+
+
+
+
+
+
+
+
+
+
 # data preparation for tidy style.
 ec_log <- ec_log %>% 
-  dplyr::mutate(date = lubridate::ymd(date)) %>% 
-  dplyr::group_by(cust, date) %>% 
-  dplyr::summarise(sales = sum(sales)) %>% 
-  dplyr::ungroup() %>% 
-  dplyr::filter(date <= lubridate::ymd("1997-09-30")) %>% 
+    dplyr::mutate(cust=as.numeric(cust),
+                  date = lubridate::ymd(date)) %>% 
+    dplyr::arrange(cust) %>% 
+    dplyr::group_by(cust, date) %>% 
+    dplyr::summarise(sales = sum(sales)) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::filter(date <= lubridate::ymd("1997-09-30"))
+  
+# dc.SplitUpElogForRepeatTrans with tidy style.
+  
+  
+
+repeat_trans_elog <- ec_log  %>% 
+  dplyr::group_by(cust) %>% 
+  dplyr::mutate(birth_per = min(date)) %>% 
+  dplyr::filter(date != birth_per) %>% 
+  dplyr::ungroup()%>% 
+  dplyr::select(-birth_per)
+
+cust_data <- ec_log %>% 
   dplyr::group_by(cust) %>% 
   dplyr::mutate(birth_per = min(date),
                 last_date = max(date)) %>% 
-  dplyr::filter(date != birth_per) %>% 
-  dplyr::ungroup() %>% 
-  dplyr::select(-birth_per, -last_date)
+  dplyr::summarise(birth.per = birth_per[1],
+                   last.date = last_date[1],
+                   first.sales = sales[1],
+                   last.sales  = sales[length(sales)]) %>% 
+  dplyr::ungroup()
+
+split_data_tidy <- list(repeat.trans.elog = repeat_trans_elog,
+                        cust.data         = cust_data)
