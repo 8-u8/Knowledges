@@ -5,12 +5,13 @@ name = "pypi"
 
 [packages]
 gpboost = "*"
-numpy = "*"
+numpy = "<=1.20"
 pandas = "*"
 ipykernel = "*"
 ipython = "*"
 flake8 = "*"
 matplotlib = "*"
+shap = "*"
 
 [dev-packages]
 autopep8 = "*"
